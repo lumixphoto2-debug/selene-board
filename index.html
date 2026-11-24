@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muse1への連絡</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font-family: system-ui, sans-serif; background:#0b1226; color:#eef1ff; }
+  header { padding:14px 16px; background:#111a38; position:sticky; top:0; }
+  header h1 { font-size:17px; margin:0; }
+  header p { margin:4px 0 0; font-size:12px; color:#9fb0e8; }
+  #list { padding:12px 12px 110px; max-width:720px; margin:0 auto; }
+  .msg { margin:10px 0; padding:10px 12px; border-radius:12px; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
+  .selene { background:#1d2a52; margin-left:36px; }
+  .muse1 { background:#233d2b; margin-right:36px; }
+  .meta { font-size:11px; color:#9fb0e8; margin-bottom:4px; }
+  #bar { position:fixed; left:0; right:0; bottom:0; background:#111a38; padding:10px; }
+  #bar .row { max-width:720px; margin:0 auto; display:flex; gap:8px; }
+  #text { flex:1; min-height:44px; max-height:120px; border-radius:10px; border:1px solid #33427a; background:#0b1226; color:#eef1ff; padding:10px; font-size:15px; }
+  #send { border:0; border-radius:10px; padding:0 18px; background:#4f74ff; color:#fff; font-size:15px; }
+  #err { color:#ff9c9c; font-size:13px; padding:8px 16px; display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Muse1への連絡</h1>
+  <p>Muse1が定期的に確認して返信します。返信には少し時間がかかります。</p>
+</header>
+<div id="err"></div>
+<div id="list"></div>
+<div id="bar"><div class="row">
+  <textarea id="text" placeholder="メッセージを書く"></textarea>
+  <button id="send">送る</button>
+</div></div>
+<script>
+  const params = new URLSearchParams(location.search);
+  let key = params.get('k') || localStorage.getItem('board_key') || '';
+  if (params.get('k')) localStorage.setItem('board_key', key);
+  const list = document.getElementById('list');
+  const err = document.getElementById('err');
+  function showErr(m){ err.textContent = m; err.style.display = m ? 'block' : 'none'; }
+  function fmt(ts){ try { return new Date(ts).toLocaleString('ja-JP'); } catch(e){ return ts; } }
+  async function load(){
+    if (!key) { showErr('キー付きのリンクから開いてください。'); return; }
+    try {
+      const r = await fetch('/api/messages', { headers: { 'x-board-key': key } });
+      if (r.status === 401) { showErr('キーが違います。'); return; }
+      const data = await r.json();
+      const msgs = (data.messages || []).slice().reverse();
+      list.innerHTML = '';
+      for (const m of msgs) {
+        const d = document.createElement('div');
+        d.className = 'msg ' + (m.author === 'muse1' ? 'muse1' : 'selene');
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = (m.author === 'muse1' ? 'Muse1' : 'Selene') + ' ・ ' + fmt(m.ts);
+        const b = document.createElement('div');
+        b.textContent = m.body;
+        d.appendChild(meta); d.appendChild(b);
+        list.appendChild(d);
+      }
+      showErr('');
+      window.scrollTo(0, document.body.scrollHeight);
+    } catch(e) { showErr('読み込みに失敗しました。'); }
+  }
+  async function send(){
+    const t = document.getElementById('text');
+    const body = t.value.trim();
+    if (!body) return;
+    try {
+      const r = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-board-key': key },
+        body: JSON.stringify({ author: 'selene', body })
+      });
+      if (!r.ok) { showErr('送信に失敗しました。'); return; }
+      t.value = '';
+      load();
+    } catch(e) { showErr('送信に失敗しました。'); }
+  }
+  document.getElementById('send').addEventListener('click', send);
+  load();
+  setInterval(load, 60000);
+</script>
+</body>
+</html>
